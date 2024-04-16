@@ -15,9 +15,6 @@ from bcc import BPF
 import time
 
 
-g_trace_data: dict[int, TraceDatum] = {}
-
-
 class TraceDatum:
     def __init__(self):
         self.pid_tgid = False
@@ -44,28 +41,28 @@ dir:    {self.working_dir}
 
 
     def check_fields(self):
-        if not pid_tgid:
-            has_no("pid_tgid")
+        if not self.pid_tgid:
+            self.has_no("pid_tgid")
             return False
 
-        if not comm:
-            has_no("comm")
+        if not self.comm:
+            self.has_no("comm")
             return False
 
-        if not file_path:
-            has_no("file_path")
+        if not self.file_path:
+            self.has_no("file_path")
             return False
 
-        if args == []:
-            has_no("args")
+        if self.args == []:
+            self.has_no("args")
             return False
 
-        if envs == []:
-            has_no("envs")
-            return False
+        # if self.envs == []:
+        #     self.has_no("envs")
+        #     return False
 
-        if path_parts == []:
-            has_no("working_dir")
+        if self.path_parts == []:
+            self.has_no("working_dir")
             return False
 
         return True
@@ -76,14 +73,15 @@ dir:    {self.working_dir}
         self.working_dir = "/" + "/".join(self.path_parts)
 
 
+g_trace_data: dict[int, TraceDatum] = {}
 
-def get_trace_datum(pid_tgid):
+def get_trace_datum(pid_tgid) -> TraceDatum:
     if pid_tgid in g_trace_data.keys():
         return g_trace_data[pid_tgid]
     else:
         d = TraceDatum()
         d.pid_tgid = pid_tgid
-        g_trace_data[pid_tgid] = pid_tgid
+        g_trace_data[pid_tgid] = d
         return d
 
 
@@ -142,7 +140,9 @@ def record_path_part(ctx, data, size):
 
 
 def write_out():
-    pass
+    with open('execve-data.txt', 'w') as f:
+        for d in g_trace_data.values():
+            f.write(str(d))
 
 # TODO check sudo
 # TODO store received data
