@@ -1,0 +1,161 @@
+//===----------------------------------------------------------------------===//
+//
+// Author: Mao Yifu, maoif@ios.ac.cn
+//
+// BPF program for execve() tracing.
+//
+//===----------------------------------------------------------------------===//
+
+#include <linux/sched.h>
+#include <linux/path.h>
+#include <linux/fs_struct.h>
+#include <linux/dcache.h>
+
+#define MAX_STR_SIZE   4096
+#define PATH_SIZE      256
+#define MAX_ARGS       32
+#define MAX_ENVS       16
+#define MAX_PATH_DEPTH 20
+
+#define MAX_PATH_READ 32
+
+// Creates a ringbuf called events with N pages of space, shared across all CPUs
+BPF_RINGBUF_OUTPUT(events_basic, 64);
+BPF_RINGBUF_OUTPUT(events_arg, 128);
+BPF_RINGBUF_OUTPUT(events_env, 128);
+BPF_RINGBUF_OUTPUT(events_path_part, 128);
+
+struct data_basic {
+    u64  pid_tgid;
+    char comm[TASK_COMM_LEN];
+    char filename[PATH_SIZE];
+};
+
+// Each arg, env and path component is submitted to userspace individually
+// to avoid having to track the char index into a single buffer,
+// which would lead to boasted program size and verification failure.
+
+struct data_arg {
+    u64  pid_tgid;
+    char args[MAX_STR_SIZE];
+};
+
+struct data_env {
+    u64  pid_tgid;
+    char envs[MAX_STR_SIZE];
+};
+
+struct data_path_part {
+    u64  pid_tgid;
+    char path[MAX_PATH_READ];
+};
+
+// From BCC virtiostat
+/* local strcmp function, max length 8 to protect instruction loops */
+#define CMPMAX	8
+
+static int local_strcmp(const char *cs, const char *ct)
+{
+    int len = 0;
+    unsigned char c1, c2;
+
+    while (len++ < CMPMAX) {
+        c1 = *cs++;
+        c2 = *ct++;
+        if (c1 != c2)
+            return c1 < c2 ? -1 : 1;
+        if (!c1)
+            break;
+    }
+    return 0;
+}
+
+// Convenience macro for auto-attaching probes.
+TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
+    struct data_basic * data_b = events_basic.ringbuf_reserve(sizeof(struct data_basic));
+    if (data_b == NULL) return 0;
+
+    // need sudo to access `args` structure
+    char ** arguments = args->argv;
+    char ** envvars = args->envp;
+    struct task_struct * t  = (struct task_struct *)bpf_get_current_task();
+    struct fs_struct   * fs = (struct fs_struct *)(t->fs);
+
+    bpf_get_current_comm(data_b->comm, sizeof(data_b->comm));
+    bpf_probe_read_user_str(data_b->filename, sizeof(data_b->filename), args->filename);
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    data_b->pid_tgid = pid_tgid;
+
+    // read commandline arguments
+    int c = MAX_ARGS;
+    while (c > 0) {
+        if (*arguments == NULL) break;
+
+        // Cannot reuse the same struct by reserving it outside the loop,
+        // cause the verifier drops the reference of the buffer after ringbuf_submit().
+        struct data_arg * data_a = events_arg.ringbuf_reserve(sizeof(struct data_arg));
+        if (data_a == NULL) {
+            // Need this to pass the verifier, otherwise there is dangling reference.
+            events_basic.ringbuf_discard(data_b, 0);
+            return 0;
+        }
+
+        data_a->pid_tgid = pid_tgid;
+        // bpf_probe_read_user_str() calls __builtin_memset() automatically,
+        // hence no need to zero-init
+        bpf_probe_read_user_str(data_a->args, sizeof(data_a->args), *arguments);
+
+        arguments++;
+        c--;
+        events_arg.ringbuf_submit(data_a, 0);
+    }
+
+    // read environment variables
+    c = MAX_ENVS;
+    while (c > 0) {
+        if (*envvars == NULL) break;
+
+        struct data_env * data_e = events_env.ringbuf_reserve(sizeof(struct data_env));
+        if (data_e == NULL) {
+            events_basic.ringbuf_discard(data_b, 0);
+            return 0;
+        }
+
+        data_e->pid_tgid = pid_tgid;
+        bpf_probe_read_user_str(data_e->envs, sizeof(data_e->envs), *envvars);
+
+        envvars++;
+        c--;
+        events_env.ringbuf_submit(data_e, 0);
+    }
+
+    // read working dir
+    c = MAX_PATH_DEPTH;
+    struct dentry * d = fs->pwd.dentry;
+    while (c > 0) {
+        // this is kernel data!
+        const char * p = d->d_name.name;
+        char buf[MAX_PATH_READ];
+        bpf_probe_read_kernel_str(buf, MAX_PATH_READ, p);
+
+        if (local_strcmp(buf, "/") == 0) { break; }
+
+        struct data_path_part * data_p = events_path_part.ringbuf_reserve(sizeof(struct data_path_part));
+        if (data_p == NULL) {
+            events_basic.ringbuf_discard(data_b, 0);
+            return 0;
+        }
+
+        data_p->pid_tgid = pid_tgid;
+        bpf_probe_read_kernel_str(data_p->path, sizeof(data_p->path), p);
+
+        d = d->d_parent;
+        c--;
+        events_path_part.ringbuf_submit(data_p, 0);
+    }
+
+    // serves as the terminator
+    events_basic.ringbuf_submit(data_b, 0 /* flags */);
+
+    return 0;
+}
