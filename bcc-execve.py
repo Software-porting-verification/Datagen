@@ -103,8 +103,6 @@ def record_basic(ctx, data, size):
 
     d.assemble_working_dir()
 
-    print(f"ids: {ids}, comm: {comm}, callee: {filename}")
-
 
 def record_arg(ctx, data, size):
     event = b['events_arg'].event(data)
@@ -114,8 +112,6 @@ def record_arg(ctx, data, size):
     d = get_trace_datum(ids)
     d.args.append(arg)
 
-    print(f"ids: {ids}, arg: {arg}")
-
 
 def record_env(ctx, data, size):
     event = b['events_env'].event(data)
@@ -124,8 +120,6 @@ def record_env(ctx, data, size):
 
     d = get_trace_datum(ids)
     d.envs.append(env)
-
-    print(f"ids: {ids}, env: {env}")
 
 
 def record_path_part(ctx, data, size):
