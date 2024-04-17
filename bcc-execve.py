@@ -13,6 +13,7 @@
 
 from bcc import BPF
 import time
+import argparse
 
 
 class TraceDatum:
@@ -24,20 +25,30 @@ class TraceDatum:
         self.envs = []
         self.path_parts = []
         self.working_dir = False
+        self.creator = ""
+        self.fail_arg = False
+        self.fail_env = False
+        self.fail_path = False
 
 
     def __str__(self):
         return f"""
-caller: {self.comm}
-callee: {self.file_path}
-args:   {self.args}
-envs:   {self.envs}
-dir:    {self.working_dir}
+fail_arg:  {self.fail_arg}
+fail_env:  {self.fail_env}
+fail_path: {self.fail_path}
+creator:  {self.creator}
+pid_tgid: {self.pid_tgid}
+caller:   {self.comm}
+callee:   {self.file_path}
+args:     {self.args}
+envs:     {self.envs}
+dir:      {self.working_dir}
         """
 
 
     def has_no(self, what):
-        print(f"One TraceDatum has no {what}")
+        pass
+        # print(f"One TraceDatum has no {what}")
 
 
     def check_fields(self):
@@ -75,12 +86,13 @@ dir:    {self.working_dir}
 
 g_trace_data: dict[int, TraceDatum] = {}
 
-def get_trace_datum(pid_tgid) -> TraceDatum:
+def get_trace_datum(pid_tgid, creator) -> TraceDatum:
     if pid_tgid in g_trace_data.keys():
         return g_trace_data[pid_tgid]
     else:
         d = TraceDatum()
         d.pid_tgid = pid_tgid
+        d.creator = creator
         g_trace_data[pid_tgid] = d
         return d
 
@@ -91,17 +103,12 @@ def record_basic(ctx, data, size):
     comm = event.comm.decode('utf-8')
     filename = event.filename.decode('utf-8')
 
-    d = get_trace_datum(ids)
+    d = get_trace_datum(ids, 'record_basic')
     d.comm = comm
     d.file_path = filename
-    # TODO check and parse data, working dir
-
-    if not d.check_fields():
-        print(f"Bad TraceDatum: {d}")
-        del g_trace_data[ids]
-        return
-
-    d.assemble_working_dir()
+    d.fail_arg = event.fail_arg
+    d.fail_env = event.fail_env
+    d.fail_path = event.fail_path
 
 
 def record_arg(ctx, data, size):
@@ -109,7 +116,7 @@ def record_arg(ctx, data, size):
     ids = event.pid_tgid
     arg = event.args.decode('utf-8')
 
-    d = get_trace_datum(ids)
+    d = get_trace_datum(ids, 'record_arg')
     d.args.append(arg)
 
 
@@ -118,7 +125,7 @@ def record_env(ctx, data, size):
     ids = event.pid_tgid
     env = event.envs.decode('utf-8')
 
-    d = get_trace_datum(ids)
+    d = get_trace_datum(ids, 'record_env')
     d.envs.append(env)
 
 
@@ -127,19 +134,52 @@ def record_path_part(ctx, data, size):
     ids = event.pid_tgid
     path = event.path.decode('utf-8')
 
-    d = get_trace_datum(ids)
+    d = get_trace_datum(ids, 'record_path_part')
     d.path_parts.append(path)
 
-    print(f"ids: {ids}, path: {path}")
+
+def skip_result(datum: TraceDatum):
+    filter_prefixes = ['/bin/', '/usr/bin/', '/usr/sbin/', '/usr/lib/', '/usr/libexec/', '/sbin/']
+    callee = datum.file_path
+    for p in filter_prefixes:
+       if callee.startswith(p):
+            return True
+
+    return False
 
 
-def write_out():
-    with open('execve-data.txt', 'w') as f:
+def write_results(output_file):
+    with open(output_file, 'w') as f:
         for d in g_trace_data.values():
-            f.write(str(d))
+            if skip_result(d):
+                continue
+
+            if d.check_fields():
+                d.assemble_working_dir()
+                f.write(str(d))
+
+
+def print_results():
+    pass
+
+
+###
+### start of program
+###
 
 # TODO check sudo
 # TODO store received data
+# TODO parse results
+
+parser = argparse.ArgumentParser(
+    prog='bcc-execve',
+    description='Analyze bpftrace data and generate dataset.')
+parser.add_argument('-o', '--output', help='save the traces to file')
+
+args = parser.parse_args()
+output_file = ''
+if args.output != None:
+    output_file = args.output
 
 
 # load BPF program
@@ -157,5 +197,8 @@ while True:
         b.ring_buffer_poll()
         time.sleep(0.1)
     except KeyboardInterrupt:
-        write_out()
+        if output_file == '':
+            print_results()
+        else:
+            write_results(output_file)
         exit()

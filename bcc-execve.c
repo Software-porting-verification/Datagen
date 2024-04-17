@@ -11,7 +11,7 @@
 #include <linux/fs_struct.h>
 #include <linux/dcache.h>
 
-#define MAX_STR_SIZE   4096
+#define MAX_STR_SIZE   (4096 - sizeof(u64))
 #define PATH_SIZE      256
 #define MAX_ARGS       32
 #define MAX_ENVS       16
@@ -20,13 +20,16 @@
 #define MAX_PATH_READ 32
 
 // Creates a ringbuf called events with N pages of space, shared across all CPUs
-BPF_RINGBUF_OUTPUT(events_basic, 64);
-BPF_RINGBUF_OUTPUT(events_arg, 128);
-BPF_RINGBUF_OUTPUT(events_env, 128);
-BPF_RINGBUF_OUTPUT(events_path_part, 128);
+BPF_RINGBUF_OUTPUT(events_basic, 512);
+BPF_RINGBUF_OUTPUT(events_arg, 512);
+BPF_RINGBUF_OUTPUT(events_env, 512);
+BPF_RINGBUF_OUTPUT(events_path_part, 512);
 
 struct data_basic {
     u64  pid_tgid;
+    u32 fail_arg;
+    u32 fail_env;
+    u32 fail_path;
     char comm[TASK_COMM_LEN];
     char filename[PATH_SIZE];
 };
@@ -73,7 +76,12 @@ static int local_strcmp(const char *cs, const char *ct)
 // Convenience macro for auto-attaching probes.
 TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
     struct data_basic * data_b = events_basic.ringbuf_reserve(sizeof(struct data_basic));
-    if (data_b == NULL) return 0;
+    if (data_b == NULL) {
+        data_b = events_basic.ringbuf_reserve(sizeof(struct data_basic));
+        if (data_b == NULL) {
+            return 0;
+        }
+    }
 
     // need sudo to access `args` structure
     char ** arguments = args->argv;
@@ -83,6 +91,7 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
 
     bpf_get_current_comm(data_b->comm, sizeof(data_b->comm));
     bpf_probe_read_user_str(data_b->filename, sizeof(data_b->filename), args->filename);
+
     u64 pid_tgid = bpf_get_current_pid_tgid();
     data_b->pid_tgid = pid_tgid;
 
@@ -96,8 +105,13 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
         struct data_arg * data_a = events_arg.ringbuf_reserve(sizeof(struct data_arg));
         if (data_a == NULL) {
             // Need this to pass the verifier, otherwise there is dangling reference.
-            events_basic.ringbuf_discard(data_b, 0);
-            return 0;
+            // events_basic.ringbuf_discard(data_b, 0);
+            data_a = events_arg.ringbuf_reserve(sizeof(struct data_arg));
+            if (data_a == NULL) {
+                data_b->fail_arg = 1;
+                events_basic.ringbuf_submit(data_b, 0 /* flags */);
+                return 0;
+            }
         }
 
         data_a->pid_tgid = pid_tgid;
@@ -117,8 +131,12 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
 
         struct data_env * data_e = events_env.ringbuf_reserve(sizeof(struct data_env));
         if (data_e == NULL) {
-            events_basic.ringbuf_discard(data_b, 0);
-            return 0;
+            data_e = events_env.ringbuf_reserve(sizeof(struct data_env));
+            if (data_e == NULL) {
+                data_b->fail_env = 1;
+                events_basic.ringbuf_submit(data_b, 0 /* flags */);
+                return 0;
+            }
         }
 
         data_e->pid_tgid = pid_tgid;
@@ -142,8 +160,13 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
 
         struct data_path_part * data_p = events_path_part.ringbuf_reserve(sizeof(struct data_path_part));
         if (data_p == NULL) {
-            events_basic.ringbuf_discard(data_b, 0);
-            return 0;
+            // events_basic.ringbuf_discard(data_b, 0);
+            data_p = events_path_part.ringbuf_reserve(sizeof(struct data_path_part));
+            if (data_p == NULL) {
+                data_b->fail_path = 1;
+                events_basic.ringbuf_submit(data_b, 0 /* flags */);
+                return 0;
+            }
         }
 
         data_p->pid_tgid = pid_tgid;
@@ -154,7 +177,6 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
         events_path_part.ringbuf_submit(data_p, 0);
     }
 
-    // serves as the terminator
     events_basic.ringbuf_submit(data_b, 0 /* flags */);
 
     return 0;
