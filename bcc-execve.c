@@ -92,7 +92,7 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
     bpf_get_current_comm(data_b->comm, sizeof(data_b->comm));
     bpf_probe_read_user_str(data_b->filename, sizeof(data_b->filename), args->filename);
 
-    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u64 pid_tgid = bpf_get_current_pid_tgid() ^ bpf_ktime_get_ns();
     data_b->pid_tgid = pid_tgid;
 
     // read commandline arguments
