@@ -150,13 +150,16 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
     // read working dir
     c = MAX_PATH_DEPTH;
     struct dentry * d = fs->pwd.dentry;
+    struct dentry * d_root = fs->root.dentry;
     while (c > 0) {
+        // From Linux src dcache.h:
+        //     #define IS_ROOT(x) ((x) == (x)->d_parent)
+        // Also respect chroot by comparing with `d_root`.
+        if (d == d_root || d == d->d_parent) break;
         // this is kernel data!
         const char * p = d->d_name.name;
         char buf[MAX_PATH_READ];
         bpf_probe_read_kernel_str(buf, MAX_PATH_READ, p);
-
-        if (local_strcmp(buf, "/") == 0) { break; }
 
         struct data_path_part * data_p = events_path_part.ringbuf_reserve(sizeof(struct data_path_part));
         if (data_p == NULL) {
