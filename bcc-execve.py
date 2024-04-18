@@ -159,7 +159,11 @@ def record_arg(ctx, data, size):
 def record_env(ctx, data, size):
     event = b['events_env'].event(data)
     ids = event.pid_tgid
-    env = event.envs.decode('utf-8')
+    env = ""
+    try:
+        env = event.envs.decode('utf-8')
+    except UnicodeDecodeError:
+        env = event.envs
 
     d = get_trace_datum(ids, 'record_env')
     d.envs.append(env)
