@@ -16,6 +16,13 @@ import time
 import argparse
 
 
+F_FAIL_ARG         = 0
+F_FAIL_ENV         = 1
+F_FAIL_PATH        = 2
+F_INCOMPLETE_ARGS  = 3
+F_INCOMPLETE_ENVS  = 4
+
+
 class TraceDatum:
     def __init__(self):
         self.pid_tgid = False
@@ -26,17 +33,22 @@ class TraceDatum:
         self.path_parts = []
         self.working_dir = False
         self.creator = ""
+        self.flags = 0
         self.fail_arg = False
         self.fail_env = False
         self.fail_path = False
+        self.incomplete_args = False
+        self.incomplete_envs = False
 
 
     def __str__(self):
         return f"""
+flags:     {bin(self.flags)}
 fail_arg:  {self.fail_arg}
 fail_env:  {self.fail_env}
 fail_path: {self.fail_path}
-creator:  {self.creator}
+incomplete_args: {self.incomplete_args}
+incomplete_envs: {self.incomplete_envs}
 pid_tgid: {self.pid_tgid}
 caller:   {self.comm}
 callee:   {self.file_path}
@@ -84,6 +96,28 @@ dir:      {self.working_dir}
         self.working_dir = "/" + "/".join(self.path_parts)
 
 
+    def parse_flags(self):
+        if self.flags & (1 << F_FAIL_ARG) == F_FAIL_ARG:
+            self.fail_arg = True
+
+        if self.flags & (1 << F_FAIL_ENV) == F_FAIL_ENV:
+            self.fail_env = True
+
+        if self.flags & (1 << F_FAIL_PATH) == F_FAIL_PATH:
+            self.fail_path = True
+
+        if self.flags & (1 << F_INCOMPLETE_ARGS) == F_INCOMPLETE_ARGS:
+            self.incomplete_args = True
+
+        if self.flags & (1 << F_INCOMPLETE_ENVS) == F_INCOMPLETE_ENVS:
+            self.incomplete_envs = True
+
+
+    def prepare(self):
+        self.parse_flags()
+        self.assemble_working_dir()
+
+
 g_trace_data: dict[int, TraceDatum] = {}
 
 def get_trace_datum(pid_tgid, creator) -> TraceDatum:
@@ -106,15 +140,17 @@ def record_basic(ctx, data, size):
     d = get_trace_datum(ids, 'record_basic')
     d.comm = comm
     d.file_path = filename
-    d.fail_arg = event.fail_arg
-    d.fail_env = event.fail_env
-    d.fail_path = event.fail_path
+    d.flags = event.flags
 
 
 def record_arg(ctx, data, size):
     event = b['events_arg'].event(data)
     ids = event.pid_tgid
-    arg = event.args.decode('utf-8')
+    arg = ""
+    try:
+        arg = event.args.decode('utf-8')
+    except UnicodeDecodeError:
+        arg = event.args
 
     d = get_trace_datum(ids, 'record_arg')
     d.args.append(arg)
@@ -155,7 +191,7 @@ def write_results(output_file):
                 continue
 
             if d.check_fields():
-                d.assemble_working_dir()
+                d.prepare()
                 f.write(str(d))
 
 

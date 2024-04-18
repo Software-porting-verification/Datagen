@@ -19,6 +19,12 @@
 
 #define MAX_PATH_READ 32
 
+#define F_FAIL_ARG        0
+#define F_FAIL_ENV        1
+#define F_FAIL_PATH       2
+#define F_INCOMPLETE_ARGS 3
+#define F_INCOMPLETE_ENVS 4
+
 // Creates a ringbuf called events with N pages of space, shared across all CPUs
 BPF_RINGBUF_OUTPUT(events_basic, 512);
 BPF_RINGBUF_OUTPUT(events_arg, 512);
@@ -27,9 +33,7 @@ BPF_RINGBUF_OUTPUT(events_path_part, 512);
 
 struct data_basic {
     u64  pid_tgid;
-    u32 fail_arg;
-    u32 fail_env;
-    u32 fail_path;
+    u32 flags;
     char comm[TASK_COMM_LEN];
     char filename[PATH_SIZE];
 };
@@ -73,6 +77,11 @@ static int local_strcmp(const char *cs, const char *ct)
     return 0;
 }
 
+static void set_flag(u32 * flags, int flag) {
+    u32 fgs = *flags;
+    *flags = ((1 << flag) | fgs);
+}
+
 // Convenience macro for auto-attaching probes.
 TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
     struct data_basic * data_b = events_basic.ringbuf_reserve(sizeof(struct data_basic));
@@ -94,6 +103,7 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
 
     u64 pid_tgid = bpf_get_current_pid_tgid() ^ bpf_ktime_get_ns();
     data_b->pid_tgid = pid_tgid;
+    data_b->flags = 0ul;
 
     // read commandline arguments
     int c = MAX_ARGS;
@@ -108,7 +118,7 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
             // events_basic.ringbuf_discard(data_b, 0);
             data_a = events_arg.ringbuf_reserve(sizeof(struct data_arg));
             if (data_a == NULL) {
-                data_b->fail_arg = 1;
+                set_flag(&data_b->flags, F_FAIL_ARG);
                 events_basic.ringbuf_submit(data_b, 0 /* flags */);
                 return 0;
             }
@@ -124,6 +134,10 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
         events_arg.ringbuf_submit(data_a, 0);
     }
 
+    if (c == 0 && *arguments != NULL) {
+        set_flag(&data_b->flags, F_INCOMPLETE_ARGS);
+    }
+
     // read environment variables
     c = MAX_ENVS;
     while (c > 0) {
@@ -133,7 +147,7 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
         if (data_e == NULL) {
             data_e = events_env.ringbuf_reserve(sizeof(struct data_env));
             if (data_e == NULL) {
-                data_b->fail_env = 1;
+                set_flag(&data_b->flags, F_FAIL_ENV);
                 events_basic.ringbuf_submit(data_b, 0 /* flags */);
                 return 0;
             }
@@ -145,6 +159,10 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
         envvars++;
         c--;
         events_env.ringbuf_submit(data_e, 0);
+    }
+
+    if (c == 0 && *envvars != NULL) {
+        set_flag(&data_b->flags, F_INCOMPLETE_ENVS);
     }
 
     // read working dir
@@ -166,7 +184,7 @@ TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
             // events_basic.ringbuf_discard(data_b, 0);
             data_p = events_path_part.ringbuf_reserve(sizeof(struct data_path_part));
             if (data_p == NULL) {
-                data_b->fail_path = 1;
+                set_flag(&data_b->flags, F_FAIL_PATH);
                 events_basic.ringbuf_submit(data_b, 0 /* flags */);
                 return 0;
             }
