@@ -139,7 +139,7 @@ def record_path_part(ctx, data, size):
 
 
 def skip_result(datum: TraceDatum):
-    filter_prefixes = ['/bin/', '/usr/bin/', '/usr/sbin/', '/usr/lib/', '/usr/libexec/', '/sbin/']
+    filter_prefixes = ['/bin/', '/usr/', '/sbin/']
     callee = datum.file_path
     for p in filter_prefixes:
        if callee.startswith(p):
