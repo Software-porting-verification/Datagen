@@ -14,7 +14,7 @@
 #define MAX_STR_SIZE   (4096 - sizeof(u64))
 #define PATH_SIZE      256
 #define MAX_ARGS       32
-#define MAX_ENVS       16
+#define MAX_ENVS       64
 #define MAX_PATH_DEPTH 20
 
 #define MAX_PATH_READ 32
