@@ -97,19 +97,19 @@ dir:      {self.working_dir}
 
 
     def parse_flags(self):
-        if self.flags & (1 << F_FAIL_ARG) == F_FAIL_ARG:
+        if self.flags & (1 << F_FAIL_ARG) == (1 << F_FAIL_ARG):
             self.fail_arg = True
 
-        if self.flags & (1 << F_FAIL_ENV) == F_FAIL_ENV:
+        if self.flags & (1 << F_FAIL_ENV) == (1 << F_FAIL_ENV):
             self.fail_env = True
 
-        if self.flags & (1 << F_FAIL_PATH) == F_FAIL_PATH:
+        if self.flags & (1 << F_FAIL_PATH) == (1 << F_FAIL_PATH):
             self.fail_path = True
 
-        if self.flags & (1 << F_INCOMPLETE_ARGS) == F_INCOMPLETE_ARGS:
+        if self.flags & (1 << F_INCOMPLETE_ARGS) == (1 << F_INCOMPLETE_ARGS):
             self.incomplete_args = True
 
-        if self.flags & (1 << F_INCOMPLETE_ENVS) == F_INCOMPLETE_ENVS:
+        if self.flags & (1 << F_INCOMPLETE_ENVS) == (1 << F_INCOMPLETE_ENVS):
             self.incomplete_envs = True
 
 
