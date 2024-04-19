@@ -14,6 +14,7 @@
 from bcc import BPF
 import time
 import argparse
+import yaml
 
 
 F_FAIL_ARG         = 0
@@ -22,8 +23,14 @@ F_FAIL_PATH        = 2
 F_INCOMPLETE_ARGS  = 3
 F_INCOMPLETE_ENVS  = 4
 
+G_TRACEDATUM_TAG = u'!!bcc_trace_datum'
 
-class TraceDatum:
+package = ''
+version = ''
+
+class TraceDatum(yaml.YAMLObject):
+    yaml_tag = G_TRACEDATUM_TAG
+
     def __init__(self):
         self.pid_tgid = False
         self.comm = False
@@ -178,25 +185,56 @@ def record_path_part(ctx, data, size):
     d.path_parts.append(path)
 
 
-def skip_result(datum: TraceDatum):
-    filter_prefixes = ['/bin/', '/usr/', '/sbin/']
+def filter_result(datum: TraceDatum):
+    filter_prefixes = []
     callee = datum.file_path
     for p in filter_prefixes:
        if callee.startswith(p):
-            return True
+            return False
 
-    return False
+    return datum.check_fields()
 
 
-def write_results(output_file):
-    with open(output_file, 'w') as f:
-        for d in g_trace_data.values():
-            if skip_result(d):
-                continue
+def trace_datum_constructor(loader, node):
+    value = loader.construct_mapping(node)
 
-            if d.check_fields():
-                d.prepare()
+    d = TraceDatum()
+    d.pid_tgid = value['pid_tgid']
+    d.comm = value['comm']
+    d.file_path = value['file_path']
+    d.args = value['args']
+    d.envs = value['envs']
+    d.working_dir = value['working_dir']
+    d.flags = value['flags']
+    d.fail_arg = value['fail_arg']
+    d.fail_env = value['fail_env']
+    d.fail_path = value['fail_path']
+    d.incomplete_args = value['incomplete_args']
+    d.incomplete_envs = value['incomplete_envs']
+    d.path_parts = []
+    d.creator = ''
+
+    return d
+
+
+def write_results(output_file, save_raw, output_format):
+    for d in g_trace_data.values():
+        d.prepare()
+
+    if save_raw:
+        with open(output_file + '.raw', 'w') as f:
+            for d in g_trace_data.values():
                 f.write(str(d))
+
+    with open(output_file, 'w') as f:
+        result = {'package' : package, 
+                  'version' : version, 
+                  'data' : list(filter(lambda d: filter_result(d), g_trace_data.values())) }
+        if output_format == 'json':
+            print('output to json not supported yet')
+            exit(-1)
+        elif output_format == 'yaml':
+            yaml.dump(result, f)
 
 
 def print_results():
@@ -214,13 +252,22 @@ def print_results():
 parser = argparse.ArgumentParser(
     prog='bcc-execve',
     description='Analyze bpftrace data and generate dataset.')
-parser.add_argument('-o', '--output', help='save the traces to file')
+parser.add_argument('-o', '--output', required=True, help='save the traces to file')
+parser.add_argument('-r', '--raw', action='store_true', help='save the captured raw data (unfiltered)')
+parser.add_argument('-p', '--package', required=True, help='package name')
+parser.add_argument('-v', '--version', required=True, help='package version')
+parser.add_argument('-f', '--format', choices=['yaml', 'json'], default='yaml', help='specify output format')
+
 
 args = parser.parse_args()
 output_file = ''
 if args.output != None:
     output_file = args.output
 
+save_raw = args.raw
+package  = args.package
+version  = args.version
+output_format = args.format
 
 # load BPF program
 b = BPF(src_file="bcc-execve.c")
@@ -232,6 +279,8 @@ b["events_arg"].open_ring_buffer(record_arg)
 b["events_env"].open_ring_buffer(record_env)
 b["events_path_part"].open_ring_buffer(record_path_part)
 
+yaml.add_constructor(G_TRACEDATUM_TAG, trace_datum_constructor)
+
 while True:
     try:
         b.ring_buffer_poll()
@@ -240,5 +289,5 @@ while True:
         if output_file == '':
             print_results()
         else:
-            write_results(output_file)
+            write_results(output_file, save_raw, output_format)
         exit()
