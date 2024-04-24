@@ -88,7 +88,7 @@ def filter_result(datum: TraceDatum):
     return datum.check_fields()
 
 
-def write_results(output_file, save_raw, output_format):
+def write_results(output_file, save_raw):
     for d in g_trace_data.values():
         d.prepare()
 
@@ -101,11 +101,7 @@ def write_results(output_file, save_raw, output_format):
         result = {'package' : package, 
                   'version' : version, 
                   'data' : list(filter(lambda d: filter_result(d), g_trace_data.values())) }
-        if output_format == 'json':
-            print('output to json not supported yet')
-            exit(-1)
-        elif output_format == 'yaml':
-            yaml.dump(result, f)
+        yaml.dump(result, f)
 
 
 def print_results():
@@ -127,8 +123,6 @@ parser.add_argument('-o', '--output', required=True, help='save the traces to fi
 parser.add_argument('-r', '--raw', action='store_true', help='save the captured raw data (unfiltered)')
 parser.add_argument('-p', '--package', required=True, help='package name')
 parser.add_argument('-v', '--version', required=True, help='package version')
-parser.add_argument('-f', '--format', choices=['yaml', 'json'], default='yaml', help='specify output format')
-
 
 args = parser.parse_args()
 output_file = ''
@@ -138,7 +132,6 @@ if args.output != None:
 save_raw = args.raw
 package  = args.package
 version  = args.version
-output_format = args.format
 
 # load BPF program
 b = BPF(src_file="bcc-execve.c")
@@ -160,5 +153,5 @@ while True:
         if output_file == '':
             print_results()
         else:
-            write_results(output_file, save_raw, output_format)
+            write_results(output_file, save_raw)
         exit()
