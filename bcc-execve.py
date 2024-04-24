@@ -85,7 +85,7 @@ def write_results(output_file):
     with open(output_file, 'w') as f:
         result = {'package' : package, 
                   'version' : version, 
-                  'data'    : list(g_trace_data.values()) }
+                  'data'    : list(filter(lambda d: d.check_fields(), g_trace_data.values())) }
         yaml.dump(result, f)
 
 
