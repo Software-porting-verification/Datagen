@@ -11,8 +11,6 @@ F_INCOMPLETE_ENVS  = 4
 
 G_TRACEDATUM_TAG = u'!!bcc_trace_datum'
 
-package = ''
-version = ''
 
 class TraceDatum(yaml.YAMLObject):
     yaml_tag = G_TRACEDATUM_TAG
