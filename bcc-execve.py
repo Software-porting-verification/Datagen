@@ -78,29 +78,14 @@ def record_path_part(ctx, data, size):
     d.path_parts.append(path)
 
 
-def filter_result(datum: TraceDatum):
-    filter_prefixes = []
-    callee = datum.file_path
-    for p in filter_prefixes:
-       if callee.startswith(p):
-            return False
-
-    return datum.check_fields()
-
-
-def write_results(output_file, save_raw):
+def write_results(output_file):
     for d in g_trace_data.values():
         d.prepare()
-
-    if save_raw:
-        with open(output_file + '.raw', 'w') as f:
-            for d in g_trace_data.values():
-                f.write(str(d))
 
     with open(output_file, 'w') as f:
         result = {'package' : package, 
                   'version' : version, 
-                  'data' : list(filter(lambda d: filter_result(d), g_trace_data.values())) }
+                  'data'    : list(g_trace_data.values()) }
         yaml.dump(result, f)
 
 
@@ -120,7 +105,6 @@ parser = argparse.ArgumentParser(
     prog='bcc-execve',
     description='Analyze bpftrace data and generate dataset.')
 parser.add_argument('-o', '--output', required=True, help='save the traces to file')
-parser.add_argument('-r', '--raw', action='store_true', help='save the captured raw data (unfiltered)')
 parser.add_argument('-p', '--package', required=True, help='package name')
 parser.add_argument('-v', '--version', required=True, help='package version')
 
@@ -129,7 +113,6 @@ output_file = ''
 if args.output != None:
     output_file = args.output
 
-save_raw = args.raw
 package  = args.package
 version  = args.version
 
@@ -153,5 +136,5 @@ while True:
         if output_file == '':
             print_results()
         else:
-            write_results(output_file, save_raw)
+            write_results(output_file)
         exit()
