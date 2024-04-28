@@ -75,7 +75,7 @@ dir:      {self.working_dir}
         #     self.has_no("envs")
         #     return False
 
-        if self.path_parts == []:
+        if self.path_parts == [] and not self.working_dir:
             self.has_no("working_dir")
             return False
 
@@ -83,6 +83,9 @@ dir:      {self.working_dir}
 
 
     def assemble_working_dir(self):
+        if self.path_parts == []:
+            return
+
         self.path_parts.reverse()
         self.working_dir = "/" + "/".join(self.path_parts)
 
