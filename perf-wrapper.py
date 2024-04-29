@@ -45,8 +45,8 @@ def wrap(exe: str):
         res.check_returncode()
         if 'ASCII text' in res.stdout:
             # skip non-binaries
-            notice(f'{exe} is not binary, contents:')
-            subprocess.run(["cat", exe])
+            notice(f'{exe} is not binary, skipping')
+            # subprocess.run(["cat", exe])
             notice()
             return
     
