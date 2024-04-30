@@ -31,7 +31,7 @@ def analyze_envs():
 def filter_result(datum: TraceDatum):
     # TODO filter .sh?
 
-    filter_prefixes = ['/bin/', '/usr/', '/sbin/', '/snap/', '/opt/']
+    filter_prefixes = ['/bin/', '/usr/', '/sbin/', '/snap/', '/opt/', '/tmp/', '/etc/']
     callee = datum.file_path
     for p in filter_prefixes:
        if callee.startswith(p):
