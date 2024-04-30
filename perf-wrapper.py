@@ -65,7 +65,8 @@ def wrap(exe: str):
 #!/usr/bin/env bash
 
 SUFIX=$(date +%N_%F_%T)
-perf record -F 999 -ag -o {g_perf_data_path}/{out}.$SUFIX {backup} $@
+perf record -F 999 -e instructions:u -ag --user-callchains \\
+    -o {g_perf_data_path}/{out}.$SUFIX {backup} "$@" 2>> {g_perf_data_path}/errors.{out}.$SUFIX
 """
 
     if g_dry_run:
