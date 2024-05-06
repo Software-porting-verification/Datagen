@@ -52,8 +52,6 @@ def filter_result(datum: TraceDatum):
 
 def analyze_for_perf(data: list[TraceDatum]):
     # TODO need manual filtering of scripts/binaries? Maybe do this later
-    binaries = []
-
     for d in data:
         exe = d.file_path
         # caller's working dir
@@ -63,20 +61,20 @@ def analyze_for_perf(data: list[TraceDatum]):
         if not exe.startswith('/'):
             exe = pwd + '/' + exe
 
-        binaries.append(exe)
-    
-    # deduplicate
-    return list(set(binaries))
+        d.file_path = exe
 
 
 def analyzer_for_fuzz(data: list[TraceDatum]):
+    # fuzz data should not be deduplicated
     return []
 
 
 def analyze(data: list[TraceDatum]):
     filtered = list(filter(lambda d: filter_result(d), data))
+    analyze_for_perf(filtered)
     fuzz = analyzer_for_fuzz(filtered)
-    perf = analyze_for_perf(filtered)
+    
+    perf = list(set([d.file_path for d in filtered]))
 
     return fuzz, perf
 
