@@ -55,9 +55,11 @@ def wrap(exe: str):
     out = f'{base_exe}.perf.data'
 
     if g_dry_run:
-        notice(f'mv {exe} {backup}')
+        notice(f'mv {exe}')
+        notice(f'to {backup}\n')
     else:
-        notice(f'mv {exe} {backup}')
+        notice(f'mv {exe}')
+        notice(f'to {backup}\n')
         shutil.move(exe, backup)
     
     # TODO parameterize more? e.g., by reading envs
