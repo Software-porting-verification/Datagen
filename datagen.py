@@ -37,7 +37,8 @@ def filter_result(datum: TraceDatum):
        if callee.startswith(p):
             return False
 
-    filter_suffixes = ['./conftest', './configure', '.build.command', '/bin/sh', '/.', '.sh']
+    filter_suffixes = ['./conftest', './configure', '.build.command', '/bin/sh', '/.', '.sh'
+                       'config.guess']
     for p in filter_suffixes:
        if callee.endswith(p):
             return False
@@ -66,14 +67,13 @@ def analyze_for_perf(data: list[TraceDatum]):
 
 def analyzer_for_fuzz(data: list[TraceDatum]):
     # fuzz data should not be deduplicated
-    return []
+    return list([{ d.file_path : d.args } for d in data])
 
 
 def analyze(data: list[TraceDatum]):
     filtered = list(filter(lambda d: filter_result(d), data))
     analyze_for_perf(filtered)
     fuzz = analyzer_for_fuzz(filtered)
-    
     perf = list(set([d.file_path for d in filtered]))
 
     return fuzz, perf
@@ -104,9 +104,9 @@ for tf in trace_files:
         
         fuzz_path = f'{g_package}-{g_version}-fuzz'
         perf_path = f'{g_package}-{g_version}-perf'
-        # with open(fuzz_path, 'w') as f_fuzz:
-            # print(f'{tf} fuzz dataset at {fuzz_path}')
-            # pass
+        with open(fuzz_path, 'w') as f_fuzz:
+            yaml.dump(fuzz, f_fuzz)
+            print(f'{tf} fuzz dataset at {fuzz_path}')
         with open(perf_path, 'w') as f_perf:
             yaml.dump(perf, f_perf)
             print(f'{tf} perf dataset at {perf_path}')
