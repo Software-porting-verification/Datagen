@@ -78,7 +78,7 @@ perf record -F 999 -e instructions:u -ag --user-callchains \\
             notice(f'writing {exe} as\n{exe_script}')
             notice()
 
-        res = subprocess.run(["chmod", "+x", exe], capture_output=True, text=True)
+        res = subprocess.run(["chmod", "+x", exe])
         res.check_returncode()
         notice(f'written wrapper {exe}')
 
