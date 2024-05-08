@@ -20,6 +20,7 @@ from trace_datum import *
 
 g_package: str = ''
 g_version: str = ''
+g_true_exes = []
 
 def analyze_args():
     pass
@@ -30,10 +31,13 @@ def analyze_envs():
 
 
 def filter_result(datum: TraceDatum):
-    # TODO filter .sh?
+    callee = datum.file_path
+
+    if not g_true_exes == []:
+        if callee not in g_true_exes:
+            return False
 
     filter_prefixes = ['/bin/', '/usr/', '/sbin/', '/snap/', '/opt/', '/tmp/', '/etc/']
-    callee = datum.file_path
     for p in filter_prefixes:
        if callee.startswith(p):
             return False
@@ -52,8 +56,7 @@ def filter_result(datum: TraceDatum):
     return datum.check_fields()
 
 
-def analyze_for_perf(data: list[TraceDatum]):
-    # TODO need manual filtering of scripts/binaries? Maybe do this later
+def to_absolute_path(data: list[TraceDatum]):
     for d in data:
         exe = d.file_path
         # caller's working dir
@@ -72,8 +75,8 @@ def analyzer_for_fuzz(data: list[TraceDatum]):
 
 
 def analyze(data: list[TraceDatum]):
+    to_absolute_path(data)
     filtered = list(filter(lambda d: filter_result(d), data))
-    analyze_for_perf(filtered)
     fuzz = analyzer_for_fuzz(filtered)
     perf = list(set([d.file_path for d in filtered]))
 
@@ -105,6 +108,10 @@ refinement = args.refinement
 check_file(rawfile)
 if refinement is not None:
     check_file(refinement)
+    with open(refinement, 'r') as f:
+        print(f'loading refinement: {refinement}')
+        g_true_exes = yaml.load(f, Loader=yaml.Loader)
+        print(f'loading refinement: {refinement} done')
 
 with open(rawfile, 'r') as f:
     print(f'loading {rawfile}')
@@ -113,7 +120,6 @@ with open(rawfile, 'r') as f:
     g_package = data['package']
     g_version = data['version']
     fuzz, perf = analyze(data['data'])
-    # TODO format of fuzz and perf dataset
     
     fuzz_path = f'{g_package}-{g_version}-fuzz'
     perf_path = f'{g_package}-{g_version}-perf'
