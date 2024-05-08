@@ -32,13 +32,13 @@ def notice(msg: str = ''):
         print(f'[perf-wrapper] {msg}')
 
 
-def wrap(exe: str):
+def wrap(exe: str) -> bool:
     # check existence, is binary, etc.
     if not os.path.exists(exe):
         notice(f'{exe} not found, skipping')
-        return
+        return False
     elif not os.path.isfile(exe):
-        return
+        return False
     else:
         # check 'ASCII text' or 'ELF'
         res = subprocess.run(["file", exe], capture_output=True, text=True)
@@ -48,7 +48,7 @@ def wrap(exe: str):
             notice(f'{exe} is not binary, skipping')
             # subprocess.run(["cat", exe])
             notice()
-            return
+            return False
     
     base_exe = os.path.basename(exe)
     backup = f'{exe}.perf-bin'
@@ -83,6 +83,8 @@ perf record -F 999 -e instructions:u -ag --user-callchains \\
         res = subprocess.run(["chmod", "+x", exe])
         res.check_returncode()
         notice(f'written wrapper {exe}')
+
+    return True
 
 
 ###
@@ -147,5 +149,11 @@ notice(f'perf data will be stored in {g_perf_data_path}')
 
 with open(g_dataset_path, 'r') as f:
     exes = yaml.load(f, Loader=yaml.Loader)
+    true_exes = []
     for exe in exes:
-        wrap(exe)
+        if wrap(exe):
+            true_exes.append(exe)
+    
+    if not true_exes == []:
+        with open(f'{g_perf_data_path}/{g_package}_{g_version}.refinement', 'w') as f_refine:
+            yaml.dump(true_exes, f_refine)
