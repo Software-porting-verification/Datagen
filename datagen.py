@@ -15,6 +15,7 @@ import sys
 import argparse
 import yaml
 import trace_datum
+import socket
 from trace_datum import *
 
 
@@ -22,9 +23,83 @@ g_package: str = ''
 g_version: str = ''
 g_true_exes = []
 
-def analyze_args():
-    pass
+ARG_FLAG    = 'op_flag'   # -v, --help
+# TODO -I../lib
+# ARG_OP     = 'op'     # --input bla, --files f1 f2
+ARG_OP_ARG  = 'op_arg' # --quality=9, if=/dev/null
+ARG_NUMBER  = 'op_num'
+ARG_STRING  = 'op_str'
+ARG_PATH    = 'op_path'
+ARG_URL     = 'op_url'
+ARG_IP      = 'op_ip'
+ARG_UNKNOWN = 'op_unknown'
 
+
+def is_number(n):
+    is_number = True
+    try:
+        num = float(n)
+    except ValueError:
+        is_number = False
+    return is_number
+
+
+def is_url(s):
+    for prefix in ['http://', 'https://', 'ftp://', 'file://', 'data://']:
+        if s.startswith(prefix):
+            return True
+    return False
+
+
+def is_ip(s):
+    parts = s.split(':')
+    if len(parts) <= 2:
+        try:
+            ignore = socket.inet_aton(parts[0])
+            return True
+        except OSError:
+            return False
+
+    return False
+
+
+def is_path(s):
+    return False
+
+
+def classify_args(args: list[str]):
+    results = []
+    length = len(args)
+
+    for i in range(length):
+        arg = args[i]
+        
+        try:
+            if arg.startswith('--') or arg.startswith('-'):
+                if '=' in arg:
+                    results.append({ ARG_OP_ARG : arg })
+                else:
+                    results.append({ ARG_FLAG : arg })
+            elif is_url(arg):
+                results.append({ ARG_URL : arg })
+            elif is_number(arg):
+                results.append({ ARG_NUMBER : arg })
+            elif '=' in arg:
+                # dd if=/dev/zero
+                results.append({ ARG_OP_ARG : arg })
+            elif is_ip(arg):
+                results.append({ ARG_IP : arg })
+            elif is_path(arg):
+                results.append({ ARG_PATH : arg })
+            else:
+                # TODO subcommands like `perf report`
+                results.append({ ARG_UNKNOWN : arg })
+        except TypeError:
+            print(f'classify_args error: {arg}')
+            print(f'in \n {args}')
+            
+    return results
+            
 
 def analyze_envs():
     pass
@@ -70,8 +145,17 @@ def to_absolute_path(data: list[TraceDatum]):
 
 
 def analyzer_for_fuzz(data: list[TraceDatum]):
-    # fuzz data should not be deduplicated
-    return list([{ d.file_path : d.args } for d in data])
+    results = []
+
+    for d in data:
+        # fuzz data should not be deduplicated
+        args_classified = classify_args(d.args[1:])
+        results.append({ d.file_path : [d.incomplete_args, 
+                                        d.incomplete_envs, 
+                                        { 'raw_args' : d.args,
+                                          'classified_args' : args_classified }]})
+
+    return results
 
 
 def analyze(data: list[TraceDatum]):
