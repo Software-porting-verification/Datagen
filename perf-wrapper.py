@@ -66,9 +66,11 @@ def wrap(exe: str) -> bool:
     exe_script=f"""
 #!/usr/bin/env bash
 
+mkdir -p {g_perf_data_path}/errors/
+
 SUFIX=$(date +%N_%F_%T)
-perf record -F 999 -e instructions:u -g --user-callchains \\
-    -o {g_perf_data_path}/{out}.$SUFIX {backup} "$@" 2>> {g_perf_data_path}/errors.{out}.$SUFIX
+perf record -F 9999 -e instructions:u -g --user-callchains \\
+    -o {g_perf_data_path}/{out}.$SUFIX {backup} "$@" 2>> {g_perf_data_path}/errors/{out}.$SUFIX
 """
 
     if g_dry_run:
