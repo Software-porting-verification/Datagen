@@ -68,6 +68,8 @@ def wrap(exe: str) -> bool:
 
 mkdir -p {g_perf_data_path}/errors/
 
+/usr/bin/rvbench-tools/perf-fuzz-gen.py $RPM_PACKAGE_NAME $RPM_PACKAGE_VERSION {exe} "$@"
+
 SUFIX=$(date +%N_%F_%T)
 perf record -F 9999 -e instructions:u -g --user-callchains \\
     -o {g_perf_data_path}/{out}.$SUFIX {backup} "$@" 2>> {g_perf_data_path}/errors/{out}.$SUFIX
