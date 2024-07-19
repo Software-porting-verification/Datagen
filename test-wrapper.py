@@ -84,7 +84,7 @@ perf record -F 9999 -e instructions:u -g --user-callchains \\
 ID=$(date +%N_%F_%T)
 export LLVM_PROFILE_FILE=$TREC_PERF_DIR/{exe_base}_$ID.profraw
 
-{exe_backup}
+{exe_backup} "$@"
 
 if [ -e $TREC_PERF_DIR/{exe_base}_$ID.profraw ]
 then
