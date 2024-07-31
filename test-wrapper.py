@@ -78,23 +78,39 @@ perf record -F 9999 -e instructions:u -g --user-callchains \\
     2>> {g_perf_data_path}/errors/{out_perf_data}.$SUFIX
 """
 
+    exe_cov_real = f'{exe}_cov.real'
+    
+    # exe wrapper
     exe_script_coverage=f"""
 #!/usr/bin/env bash
+exec fish {exe_cov_real} "$@"
+"""
 
-ID=$(date +%N_%F_%T)
+    # true exe wrapper, written as `exe_cov_real`
+    # need this indirection because OBS uses sh only
+    exe_script_coverage_real=f"""
+#!/usr/bin/env fish
+
+set ID (date +%N_%F_%T)
 export LLVM_PROFILE_FILE=$TREC_PERF_DIR/{exe_base}_$ID.profraw
 
-{exe_backup} "$@"
+{exe_backup} $argv
 
-if [ -e $TREC_PERF_DIR/{exe_base}_$ID.profraw ]
-then
-    llvm-profdata merge -sparse $TREC_PERF_DIR/{exe_base}_$ID.profraw \\
-        -o $TREC_PERF_DIR/{exe_base}_$ID.prodata
-    llvm-cov report -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata {exe_backup} \\
-        &> $TREC_PERF_DIR/{exe_base}_$ID.report
-    llvm-cov show -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata {exe_backup} \\
-        -format=html -output-dir=$TREC_PERF_DIR/{exe_base}_$ID_report
-fi
+if test -e $TREC_PERF_DIR/{exe_base}_$ID.profraw
+    for i in (ldd {exe_backup} | grep '=>' | cut -d ' ' -f3)
+        echo $i >> $TREC_PERF_DIR/{exe_base}_$ID.debug
+        objdump -h $i | grep --quiet -E '__llvm_prf|__llvm_cov'
+        if test $status -eq 0
+            objdump -h (realpath $i) >> $TREC_PERF_DIR/{exe_base}_$ID.debug
+            echo (realpath $i) >> $TREC_PERF_DIR/{exe_base}_$ID.sos
+            set objs $objs -object $i
+        end
+    end
+
+    llvm-profdata merge -sparse $TREC_PERF_DIR/{exe_base}_$ID.profraw -o $TREC_PERF_DIR/{exe_base}_$ID.prodata
+    llvm-cov show {exe_backup} -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata -format=html -output-dir=$TREC_PERF_DIR/{exe_base}_$ID_report $objs &> $TREC_PERF_DIR/a_cov_show.log
+    llvm-cov report -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata {exe_backup} $objs &> $TREC_PERF_DIR/{exe_base}_$ID.report
+end
 """
 
     if g_wrap_method == 'perf':
@@ -117,6 +133,10 @@ fi
         res = subprocess.run(["chmod", "+x", exe])
         res.check_returncode()
         notice(f'written wrapper {exe}')
+
+        if g_wrap_method == 'cov':
+            with open(exe_cov_real, 'w') as f:
+                f.write(exe_script_coverage_real)
 
     return True
 
