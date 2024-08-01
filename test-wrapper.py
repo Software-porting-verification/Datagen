@@ -112,7 +112,6 @@ else
         end
 
         llvm-profdata merge -sparse $TREC_PERF_DIR/{exe_base}_$ID.profraw -o $TREC_PERF_DIR/{exe_base}_$ID.prodata
-        llvm-cov show {exe_backup} -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata -format=html -output-dir=$TREC_PERF_DIR/{exe_base}_$ID_report $objs &> $TREC_PERF_DIR/a_cov_show.log
         llvm-cov report -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata {exe_backup} $objs &> $TREC_PERF_DIR/{exe_base}_$ID.report
     end
 end
