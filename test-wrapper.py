@@ -94,22 +94,27 @@ exec fish {exe_cov_real} "$@"
 set ID (date +%N_%F_%T)
 export LLVM_PROFILE_FILE=$TREC_PERF_DIR/{exe_base}_$ID.profraw
 
-{exe_backup} $argv
-
-if test -e $TREC_PERF_DIR/{exe_base}_$ID.profraw
-    for i in (ldd {exe_backup} | grep '=>' | cut -d ' ' -f3)
-        echo $i >> $TREC_PERF_DIR/{exe_base}_$ID.debug
-        objdump -h $i | grep --quiet -E '__llvm_prf|__llvm_cov'
-        if test $status -eq 0
-            objdump -h (realpath $i) >> $TREC_PERF_DIR/{exe_base}_$ID.debug
-            echo (realpath $i) >> $TREC_PERF_DIR/{exe_base}_$ID.sos
-            set objs $objs -object $i
+# If exe path is a symlink, then it's a link to a wrap script,
+# just run the script to avoid generating two profile data.
+file {exe_backup} | grep --quiet 'symbolic link'
+if test $status -eq 0
+    {exe_backup} $argv
+else
+    {exe_backup} $argv
+    if test -e $TREC_PERF_DIR/{exe_base}_$ID.profraw
+        for i in (ldd {exe_backup} | grep '=>' | cut -d ' ' -f3)
+            objdump -h $i | grep --quiet -E '__llvm_prf|__llvm_cov'
+            if test $status -eq 0
+                objdump -h (realpath $i) >> $TREC_PERF_DIR/{exe_base}_$ID.debug
+                echo (realpath $i) >> $TREC_PERF_DIR/{exe_base}_$ID.sos
+                set objs $objs -object $i
+            end
         end
-    end
 
-    llvm-profdata merge -sparse $TREC_PERF_DIR/{exe_base}_$ID.profraw -o $TREC_PERF_DIR/{exe_base}_$ID.prodata
-    llvm-cov show {exe_backup} -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata -format=html -output-dir=$TREC_PERF_DIR/{exe_base}_$ID_report $objs &> $TREC_PERF_DIR/a_cov_show.log
-    llvm-cov report -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata {exe_backup} $objs &> $TREC_PERF_DIR/{exe_base}_$ID.report
+        llvm-profdata merge -sparse $TREC_PERF_DIR/{exe_base}_$ID.profraw -o $TREC_PERF_DIR/{exe_base}_$ID.prodata
+        llvm-cov show {exe_backup} -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata -format=html -output-dir=$TREC_PERF_DIR/{exe_base}_$ID_report $objs &> $TREC_PERF_DIR/a_cov_show.log
+        llvm-cov report -instr-profile $TREC_PERF_DIR/{exe_base}_$ID.prodata {exe_backup} $objs &> $TREC_PERF_DIR/{exe_base}_$ID.report
+    end
 end
 """
 
