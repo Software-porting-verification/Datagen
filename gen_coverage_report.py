@@ -51,6 +51,7 @@ with open(g_temp_path) as f:
     lines = f.readlines()
 
     row = 1
+    numbers = []
     for line in lines:
         pkg, func_cov, line_cov = line.split(':')
         try:
@@ -59,6 +60,12 @@ with open(g_temp_path) as f:
         except ValueError:
             print(f'Bad line: {line}')
             exit(-1)
+        numbers.append((pkg, func_cov, line_cov))
+
+    # sort according to line_cov
+    numbers.sort(key=lambda x: x[2], reverse=True)
+
+    for pkg, func_cov, line_cov in numbers:
         worksheet.write(row, 0, pkg)
         if func_cov >= 70:
             worksheet.write(row, 1, func_cov, cell_bg_green)
