@@ -70,8 +70,6 @@ def wrap(exe: str) -> bool:
 
 mkdir -p {g_perf_data_path}/errors/
 
-/usr/bin/rvbench-tools/perf-fuzz-gen.py $RPM_PACKAGE_NAME $RPM_PACKAGE_VERSION {exe} "$@"
-
 SUFIX=$(date +%N_%F_%T)
 perf record -F 9999 -e instructions:u -g --user-callchains \\
     -o {g_perf_data_path}/{out_perf_data}.$SUFIX {exe_backup} "$@" \\
@@ -117,10 +115,23 @@ else
 end
 """
 
+    exe_script_fuzz=f"""
+#!/usr/bin/env bash
+
+mkdir -p {g_perf_data_path}/errors/
+
+/usr/bin/rvbench-tools/perf-fuzz-gen.py $RPM_PACKAGE_NAME $RPM_PACKAGE_VERSION {exe} "$@"
+
+SUFIX=$(date +%N_%F_%T)
+#{exe_backup} "$@"
+"""
+
     if g_wrap_method == 'perf':
         exe_script = exe_script_perf
     elif g_wrap_method == 'cov':
         exe_script = exe_script_coverage
+    elif g_wrap_method == 'fuzz':
+        exe_script = exe_script_fuzz
     else:
         notice('Unknown wrap method')
         exit(-1)
@@ -187,6 +198,8 @@ if g_wrap_method_env in os.environ.keys():
     if v == 'perf':
         g_wrap_method = v
     elif v == 'cov':
+        g_wrap_method = v
+    elif v == 'fuzz':
         g_wrap_method = v
     else:
         notice(f'Bad {g_wrap_method_env} value')
