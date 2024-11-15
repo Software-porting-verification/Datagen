@@ -96,25 +96,25 @@ def classify_args(args: list[str]):
         try:
             if arg.startswith('--') or arg.startswith('-'):
                 if '=' in arg:
-                    results.append({ ARG_OP_ARG : arg })
+                    results.append([ ARG_OP_ARG, arg ])
                 else:
-                    results.append({ ARG_FLAG : arg })
+                    results.append([ ARG_FLAG, arg ])
             elif is_url(arg):
-                results.append({ ARG_URL : arg })
+                results.append([ ARG_URL, arg ])
             elif is_number(arg):
-                results.append({ ARG_NUMBER : arg })
+                results.append([ ARG_NUMBER, arg ])
             elif '=' in arg:
                 # dd if=/dev/zero
-                results.append({ ARG_OP_ARG : arg })
+                results.append([ ARG_OP_ARG, arg ])
             elif is_ip(arg):
-                results.append({ ARG_IP : arg })
+                results.append([ ARG_IP, arg ])
             elif is_file(arg):
-                results.append({ ARG_FILE : arg })
+                results.append([ ARG_FILE, arg ])
             elif is_dir(arg):
-                results.append({ ARG_DIR : arg })
+                results.append([ ARG_DIR, arg ])
             else:
                 # TODO maybe subcommands like `perf report`
-                results.append({ ARG_UNKNOWN : arg })
+                results.append([ ARG_UNKNOWN, arg ])
         except TypeError:
             notice(f'classify_args error: {arg}')
             notice(f'in \n {args}')
