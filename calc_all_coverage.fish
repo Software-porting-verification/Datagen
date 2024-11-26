@@ -84,5 +84,5 @@ notice objs: $objobjs
 
 cd -
 
-llvm-cov report -instr-profile $TREC_PERF_DIR/all.profdata $objexes $objs &> $TREC_PERF_DIR/all.report
+llvm-cov report -instr-profile $TREC_PERF_DIR/all.profdata $objexes $objobjs &> $TREC_PERF_DIR/all.report
 llvm-cov show   -instr-profile $TREC_PERF_DIR/all.profdata -format=html -output-dir=$TREC_PERF_DIR/all_report $objexes $objobjs &> $TREC_PERF_DIR/all_cov.log
