@@ -13,9 +13,6 @@
 
 ## collect coverage reports
 
-if test (count $argv) -ne 1
-    echo Please provide a dir!
-end
 
 set OSC osc
 
@@ -45,22 +42,24 @@ for i in PERF_COV_*
     if test -e all.report
         set result (grep TOTAL all.report)
         if test $status -eq 0
-            set nums (echo $result | awk -e '{print $7 ":" $10}')
+            set nums (echo $result | awk -e '{print $7 ":" $10 ":" ($8-$9) ":" $8}')
             set ns (string split : $nums)
             set func_cov (string trim --right --chars % $ns[1])
             set line_cov (string trim --right --chars % $ns[2])
-            echo $i:$func_cov:$line_cov >> $TEMP
+            set lines_cov   $ns[3]
+            set lines_total $ns[4]
+            echo $i:$func_cov:$line_cov:$lines_cov:$lines_total >> $TEMP
         else
             # no valid data in all.report
-            echo $i:0:0 >> $TEMP
+            echo $i:0:0:0:0 >> $TEMP
         end
     else
         # no all.report at all
-        echo $i:-1:-1 >> $TEMP
+        echo $i:-1:-1:0:0 >> $TEMP
     end
     
     popd
 end
 
 
-python3 (status dirname)/gen_coverage_report.py --path $TEMP
+# python3 (status dirname)/gen_coverage_report.py --path $TEMP

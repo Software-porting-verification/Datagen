@@ -45,6 +45,8 @@ cell_bg_red.set_bg_color('#EE4E4E')
 worksheet.write(0, 0, 'Package')
 worksheet.write(0, 1, 'Func Cov')
 worksheet.write(0, 2, 'Line Cov')
+worksheet.write(0, 3, '#Line Cov')
+worksheet.write(0, 4, '#Line Total')
 
 
 with open(g_temp_path) as f:
@@ -53,19 +55,24 @@ with open(g_temp_path) as f:
     row = 1
     numbers = []
     for line in lines:
-        pkg, func_cov, line_cov = line.split(':')
+        pkg, func_cov, line_cov, lines_cov, lines_total = line.split(':')
         try:
             func_cov = float(func_cov)
             line_cov = float(line_cov)
+            lines_cov = float(lines_cov)
+            lines_total = float(lines_total)
         except ValueError:
             print(f'Bad line: {line}')
             exit(-1)
-        numbers.append((pkg, func_cov, line_cov))
+        numbers.append((pkg, func_cov, line_cov, lines_cov, lines_total))
 
     # sort according to line_cov
     numbers.sort(key=lambda x: x[2], reverse=True)
 
-    for pkg, func_cov, line_cov in numbers:
+    total_lines_cov   = 0
+    total_lines_total = 0
+
+    for pkg, func_cov, line_cov, lines_cov, lines_total in numbers:
         worksheet.write(row, 0, pkg)
         if func_cov >= 70:
             worksheet.write(row, 1, func_cov, cell_bg_green)
@@ -81,7 +88,17 @@ with open(g_temp_path) as f:
         else:
             worksheet.write(row, 2, line_cov, cell_bg_red)
 
+        worksheet.write(row, 3, lines_cov)
+        worksheet.write(row, 4, lines_total)
+
+        total_lines_cov += lines_cov
+        total_lines_total += lines_total
+
         row += 1
+
+    worksheet.write(row, 0, 'Total')
+    worksheet.write(row, 3, total_lines_cov)
+    worksheet.write(row, 4, total_lines_total)
 
 workbook.close()
 print(f'Coverage report at {cov_file}')
